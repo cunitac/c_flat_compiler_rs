@@ -1,0 +1,20 @@
+[package]
+name = "c_flat_compiler_rs"
+version = "0.1.0"
+authors = ["cunitac <cunitac@gmail.com>"]
+edition = "2018"
+license = "MIT"
+
+[lib]
+name = "cbc"
+
+[[bin]]
+name = "cbc"
+path = "src/main.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = { version = "1.0.40", features = ["std"] }
+nom = "6.1.2"
+structopt = "0.3.21"
