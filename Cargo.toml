@@ -17,4 +17,5 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { version = "1.0.40", features = ["std"] }
 nom = "6.1.2"
+nom_locate = "3.0.1"
 structopt = "0.3.21"
