@@ -1,11 +1,11 @@
 use nom::alt;
 use nom::branch::alt;
-use nom::bytes::complete::tag;
-use nom::character::complete::{char, digit1, one_of};
-use nom::combinator::opt;
+use nom::bytes::complete::{tag, take_while_m_n};
+use nom::character::complete::{char, digit1, one_of, satisfy};
+use nom::combinator::{map, map_res, opt, value};
 use nom::error::ParseError;
 use nom::multi::fold_many0;
-use nom::sequence::{pair, preceded, tuple};
+use nom::sequence::{delimited, pair, preceded, tuple};
 use nom::{IResult, Parser};
 
 #[derive(Debug, PartialEq)]
@@ -73,6 +73,7 @@ impl Expr {
 #[derive(Debug, Clone, PartialEq)]
 enum Literal {
     Integer(i64),
+    Character(u8),
 }
 
 pub fn parse(source: &str) -> Result<ASTree, nom::Err<nom::error::Error<&str>>> {
@@ -193,13 +194,38 @@ fn term(source: &str) -> IResult<&str, Expr> {
 fn literal(source: &str) -> IResult<&str, Literal> {
     nom::alt!(
         source,
-        integer => { Literal::Integer }
+        integer => { Literal::Integer } |
+        character => { Literal::Character }
     )
 }
 
 fn integer(source: &str) -> IResult<&str, i64> {
     let (source, val) = digit1(source)?;
     Ok((source, val.parse().unwrap()))
+}
+
+fn character(source: &str) -> IResult<&str, u8> {
+    let simple_char = map(satisfy(|c| c != '\\' && c.is_ascii()), |ch| ch as u8);
+    let escaped_char = preceded(
+        char('\\'),
+        alt((
+            value(b'\'', char('\'')),
+            value(b'\\', char('\\')),
+            value(b'\n', char('n')),
+            value(b'\r', char('r')),
+        )),
+    );
+    let code_char = preceded(
+        char('\\'),
+        map_res(take_while_m_n(3, 3, |c: char| c.is_digit(8)), |s: &str| {
+            u8::from_str_radix(s, 8)
+        }),
+    );
+    delimited(
+        char('\''),
+        alt((simple_char, escaped_char, code_char)),
+        char('\''),
+    )(source)
 }
 
 fn skipped<'a, O, E: ParseError<&'a str>>(

@@ -2,7 +2,7 @@
 
 use structopt::StructOpt as _;
 
-fn main() -> anyhow::Result<()> {
+fn main() {
     let opt = cbc::Opt::from_args();
 
     cbc::run(opt)
