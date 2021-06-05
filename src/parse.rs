@@ -1,10 +1,9 @@
-use nom::alt;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while_m_n};
-use nom::character::complete::{char, digit1, one_of, satisfy};
-use nom::combinator::{all_consuming, map, map_res, opt, value};
+use nom::character::complete::{alpha1, alphanumeric1, char, digit1, one_of, satisfy};
+use nom::combinator::{all_consuming, map, map_res, opt, recognize, value};
 use nom::error::ParseError;
-use nom::multi::fold_many0;
+use nom::multi::{fold_many0, many0};
 use nom::sequence::{delimited, pair, preceded, tuple};
 use nom::{IResult, Parser};
 
@@ -23,6 +22,7 @@ enum Node {
 #[derive(Debug, Clone, PartialEq)]
 enum Expr {
     Literal(Literal),
+    Identifier(String),
     BinaryOp {
         op: String,
         lhs: Box<Expr>,
@@ -86,7 +86,7 @@ pub fn parse(source: &str) -> Result<ASTree, nom::Err<nom::error::Error<Span>>> 
 }
 
 fn expr(source: Span) -> IResult<Span, Expr> {
-    nom::alt!(source, expr10)
+    expr10(source)
 }
 
 fn expr10(source: Span) -> IResult<Span, Expr> {
@@ -190,19 +190,28 @@ fn term(source: Span) -> IResult<Span, Expr> {
     primary(source)
 }
 fn primary(source: Span) -> IResult<Span, Expr> {
-    let mut expr_with_paren = delimited(char('('), skipped(expr), skipped(char(')')));
-    alt!(source,
-        literal => { Expr::Literal } |
-        expr_with_paren => { std::convert::identity }
-    )
+    alt((
+        map(identifier, Expr::Identifier),
+        map(literal, Expr::Literal),
+        delimited(char('('), skipped(expr), skipped(char(')'))),
+    ))(source)
+}
+
+fn identifier(source: Span) -> IResult<Span, String> {
+    map(
+        recognize(pair(
+            alt((alpha1, tag("_"))),
+            many0(alt((alphanumeric1, tag("_")))),
+        )),
+        |span: Span| span.to_string(),
+    )(source)
 }
 
 fn literal(source: Span) -> IResult<Span, Literal> {
-    nom::alt!(
-        source,
-        integer => { Literal::Integer } |
-        character => { Literal::Character }
-    )
+    alt((
+        map(integer, Literal::Integer),
+        map(character, Literal::Character),
+    ))(source)
 }
 
 fn integer(source: Span) -> IResult<Span, i64> {
