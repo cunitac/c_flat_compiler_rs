@@ -186,8 +186,13 @@ fn expr1(source: &str) -> IResult<&str, Expr> {
     )(source)
 }
 fn term(source: &str) -> IResult<&str, Expr> {
+    primary(source)
+}
+fn primary(source: &str) -> IResult<&str, Expr> {
+    let mut expr_with_paren = delimited(char('('), skipped(expr), skipped(char(')')));
     alt!(source,
-        literal => { Expr::Literal }
+        literal => { Expr::Literal } |
+        expr_with_paren => { std::convert::identity }
     )
 }
 
@@ -374,6 +379,13 @@ mod tests {
     #[test]
     fn test_term() {
         assert_parse!(term("42"), Expr::Literal(Literal::Integer(42)));
+    }
+
+    #[test]
+    fn test_character() {
+        assert_parse!(character("'a'"), b'a');
+        assert_parse!(character("'\\n'"), b'\n');
+        assert_parse!(character("'\\060'"), b'0');
     }
 
     fn int(val: i64) -> Expr {
