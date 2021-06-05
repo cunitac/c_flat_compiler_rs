@@ -2,7 +2,7 @@ use nom::alt;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while_m_n};
 use nom::character::complete::{char, digit1, one_of, satisfy};
-use nom::combinator::{map, map_res, opt, value};
+use nom::combinator::{all_consuming, map, map_res, opt, value};
 use nom::error::ParseError;
 use nom::multi::fold_many0;
 use nom::sequence::{delimited, pair, preceded, tuple};
@@ -81,9 +81,7 @@ enum Literal {
 pub fn parse(source: &str) -> Result<ASTree, nom::Err<nom::error::Error<Span>>> {
     let source = Span::new(source);
     let (source, _) = skip(source)?;
-    let (_, root) = nom::alt!(source,
-        expr => { Node::Expr }
-    )?;
+    let (_, root) = map(all_consuming(expr), Node::Expr)(source)?;
     Ok(ASTree { root })
 }
 
