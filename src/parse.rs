@@ -8,15 +8,16 @@ use nom::error::ParseError;
 use nom::multi::{fold_many0, many0};
 use nom::sequence::{delimited, pair, preceded, tuple};
 use nom::{IResult, Parser};
+use nom_locate::position;
 
-use ast::{ASTree, Expr, Literal, Node};
+use ast::{ASTree, Expr, Literal};
 
 type Span<'a> = nom_locate::LocatedSpan<&'a str>;
 
 pub fn parse(source: &str) -> Result<ASTree, nom::Err<nom::error::Error<Span>>> {
     let source = Span::new(source);
     let (source, _) = skip(source)?;
-    let (_, root) = map(all_consuming(expr), Node::Expr)(source)?;
+    let (_, root) = all_consuming(expr)(source)?;
     Ok(ASTree::new(root))
 }
 
@@ -143,29 +144,25 @@ fn primary(source: Span) -> IResult<Span, Expr> {
     ))(source)
 }
 
-fn identifier(source: Span) -> IResult<Span, String> {
-    map(
-        recognize(pair(
-            alt((alpha1, tag("_"))),
-            many0(alt((alphanumeric1, tag("_")))),
-        )),
-        |span: Span| span.to_string(),
-    )(source)
-}
-
-fn literal(source: Span) -> IResult<Span, Literal> {
-    alt((
-        map(integer, Literal::Integer),
-        map(character, Literal::Character),
+fn identifier(source: Span) -> IResult<Span, Span> {
+    recognize(pair(
+        alt((alpha1, tag("_"))),
+        many0(alt((alphanumeric1, tag("_")))),
     ))(source)
 }
 
-fn integer(source: Span) -> IResult<Span, i64> {
-    let (source, val) = digit1(source)?;
-    Ok((source, val.parse().unwrap()))
+fn literal(source: Span) -> IResult<Span, Literal> {
+    alt((integer, character))(source)
 }
 
-fn character(source: Span) -> IResult<Span, u8> {
+fn integer(source: Span) -> IResult<Span, Literal> {
+    let (source, position) = position(source)?;
+    let (source, val) = digit1(source)?;
+    let val = val.parse().unwrap();
+    Ok((source, Literal::Integer { position, val }))
+}
+
+fn character(source: Span) -> IResult<Span, Literal> {
     let simple_char = map(satisfy(|c| c != '\\' && c.is_ascii()), |ch| ch as u8);
     let escaped_char = preceded(
         char('\\'),
@@ -182,11 +179,11 @@ fn character(source: Span) -> IResult<Span, u8> {
             u8::from_str_radix(s.fragment(), 8)
         }),
     );
-    delimited(
-        char('\''),
-        alt((simple_char, escaped_char, code_char)),
-        char('\''),
-    )(source)
+    let character = alt((simple_char, escaped_char, code_char));
+
+    let (source, position) = position(source)?;
+    let (source, val) = delimited(char('\''), character, char('\''))(source)?;
+    Ok((source, Literal::Character { position, val }))
 }
 
 fn skipped<'a, O, E: ParseError<Span<'a>>>(

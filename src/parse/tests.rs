@@ -130,7 +130,7 @@ fn test_expr1() {
 }
 #[test]
 fn test_term() {
-    assert_parse!(term("42"), Expr::Literal(Literal::Integer(42)));
+    assert_parse!(term("42"), int(42));
 }
 
 #[test]
@@ -140,6 +140,9 @@ fn test_character() {
     assert_parse!(character("'\\060'"), b'0');
 }
 
-fn int(val: i64) -> Expr {
-    Expr::Literal(Literal::Integer(val))
+fn int(val: i64) -> Expr<'static> {
+    Expr::Literal(Literal::Integer {
+        val,
+        position: Span::new(""),
+    })
 }
