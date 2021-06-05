@@ -1,3 +1,5 @@
+mod ast;
+
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while_m_n};
 use nom::character::complete::{alpha1, alphanumeric1, char, digit1, one_of, satisfy};
@@ -7,82 +9,15 @@ use nom::multi::{fold_many0, many0};
 use nom::sequence::{delimited, pair, preceded, tuple};
 use nom::{IResult, Parser};
 
+use ast::{ASTree, Expr, Literal, Node};
+
 type Span<'a> = nom_locate::LocatedSpan<&'a str>;
-
-#[derive(Debug, PartialEq)]
-pub struct ASTree {
-    root: Node,
-}
-
-#[derive(Debug, PartialEq)]
-enum Node {
-    Expr(Expr),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum Expr {
-    Literal(Literal),
-    Identifier(String),
-    BinaryOp {
-        op: String,
-        lhs: Box<Expr>,
-        rhs: Box<Expr>,
-    },
-    Cond {
-        cond: Box<Expr>,
-        then: Box<Expr>,
-        r#else: Box<Expr>,
-    },
-    LogicalOr {
-        lhs: Box<Expr>,
-        rhs: Box<Expr>,
-    },
-    LogicalAnd {
-        lhs: Box<Expr>,
-        rhs: Box<Expr>,
-    },
-}
-
-impl Expr {
-    fn binary_op(op: &str, lhs: Expr, rhs: Expr) -> Expr {
-        Expr::BinaryOp {
-            op: op.to_string(),
-            lhs: Box::new(lhs),
-            rhs: Box::new(rhs),
-        }
-    }
-    fn cond(cond: Expr, then: Expr, r#else: Expr) -> Expr {
-        Expr::Cond {
-            cond: Box::new(cond),
-            then: Box::new(then),
-            r#else: Box::new(r#else),
-        }
-    }
-    fn logical_or(lhs: Expr, rhs: Expr) -> Expr {
-        Expr::LogicalOr {
-            lhs: Box::new(lhs),
-            rhs: Box::new(rhs),
-        }
-    }
-    fn logical_and(lhs: Expr, rhs: Expr) -> Expr {
-        Expr::LogicalAnd {
-            lhs: Box::new(lhs),
-            rhs: Box::new(rhs),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum Literal {
-    Integer(i64),
-    Character(u8),
-}
 
 pub fn parse(source: &str) -> Result<ASTree, nom::Err<nom::error::Error<Span>>> {
     let source = Span::new(source);
     let (source, _) = skip(source)?;
     let (_, root) = map(all_consuming(expr), Node::Expr)(source)?;
-    Ok(ASTree { root })
+    Ok(ASTree::new(root))
 }
 
 fn expr(source: Span) -> IResult<Span, Expr> {
@@ -106,6 +41,7 @@ fn expr10(source: Span) -> IResult<Span, Expr> {
         },
     ))
 }
+
 fn expr9(source: Span) -> IResult<Span, Expr> {
     let (source, init) = expr8(source)?;
     fold_many0(
@@ -114,6 +50,7 @@ fn expr9(source: Span) -> IResult<Span, Expr> {
         Expr::logical_or,
     )(source)
 }
+
 fn expr8(source: Span) -> IResult<Span, Expr> {
     let (source, init) = expr7(source)?;
     fold_many0(
@@ -122,6 +59,7 @@ fn expr8(source: Span) -> IResult<Span, Expr> {
         Expr::logical_and,
     )(source)
 }
+
 fn expr7(source: Span) -> IResult<Span, Expr> {
     let (source, init) = expr6(source)?;
     let cmp = alt((
@@ -138,6 +76,7 @@ fn expr7(source: Span) -> IResult<Span, Expr> {
         |lhs, (op, rhs)| Expr::binary_op(op.fragment(), lhs, rhs),
     )(source)
 }
+
 fn expr6(source: Span) -> IResult<Span, Expr> {
     let (source, init) = expr5(source)?;
     fold_many0(
@@ -146,6 +85,7 @@ fn expr6(source: Span) -> IResult<Span, Expr> {
         |lhs, (op, rhs)| Expr::binary_op(op.fragment(), lhs, rhs),
     )(source)
 }
+
 fn expr5(source: Span) -> IResult<Span, Expr> {
     let (source, init) = expr4(source)?;
     fold_many0(
@@ -154,6 +94,7 @@ fn expr5(source: Span) -> IResult<Span, Expr> {
         |lhs, (op, rhs)| Expr::binary_op(op.fragment(), lhs, rhs),
     )(source)
 }
+
 fn expr4(source: Span) -> IResult<Span, Expr> {
     let (source, init) = expr3(source)?;
     fold_many0(
@@ -162,6 +103,7 @@ fn expr4(source: Span) -> IResult<Span, Expr> {
         |lhs, (op, rhs)| Expr::binary_op(&op.to_string(), lhs, rhs),
     )(source)
 }
+
 fn expr3(source: Span) -> IResult<Span, Expr> {
     let (source, init) = expr2(source)?;
     fold_many0(
@@ -170,6 +112,7 @@ fn expr3(source: Span) -> IResult<Span, Expr> {
         |lhs, (op, rhs)| Expr::binary_op(&op.to_string(), lhs, rhs),
     )(source)
 }
+
 fn expr2(source: Span) -> IResult<Span, Expr> {
     let (source, init) = expr1(source)?;
     fold_many0(
@@ -178,6 +121,7 @@ fn expr2(source: Span) -> IResult<Span, Expr> {
         |lhs, (op, rhs)| Expr::binary_op(&op.to_string(), lhs, rhs),
     )(source)
 }
+
 fn expr1(source: Span) -> IResult<Span, Expr> {
     let (source, init) = term(source)?;
     fold_many0(
@@ -186,9 +130,11 @@ fn expr1(source: Span) -> IResult<Span, Expr> {
         |lhs, (op, rhs)| Expr::binary_op(&op.to_string(), lhs, rhs),
     )(source)
 }
+
 fn term(source: Span) -> IResult<Span, Expr> {
     primary(source)
 }
+
 fn primary(source: Span) -> IResult<Span, Expr> {
     alt((
         map(identifier, Expr::Identifier),
@@ -255,150 +201,4 @@ fn skip<'a, E: ParseError<Span<'a>>>(source: Span<'a>) -> IResult<Span, Span, E>
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    macro_rules! assert_parse {
-        ($parse:ident($src:expr), $rest:expr, $ast:expr $(,)?) => {
-            assert_eq!($parse(Span::new($src)).unwrap(), ($rest, $ast))
-        };
-        ($parse:ident($src:expr), $ast:expr $(,)?) => {
-            assert_eq!($parse(Span::new($src)).unwrap(), ("", $ast))
-        };
-    }
-
-    #[test]
-    fn test_expr10() {
-        assert_parse!(expr10("4 ?\t 2 :\n  0"), Expr::cond(int(4), int(2), int(0)));
-        assert_parse!(
-            expr10("0 ? 1 ? 2 : 3 : 4 ? 5 : 6"),
-            Expr::cond(
-                int(0),
-                Expr::cond(int(1), int(2), int(3)),
-                Expr::cond(int(4), int(5), int(6))
-            )
-        );
-        assert_parse!(
-            expr10("0 ? 1 : 2 ? 3 : 4 ? 5 : 6"),
-            Expr::cond(
-                int(0),
-                int(1),
-                Expr::cond(int(2), int(3), Expr::cond(int(4), int(5), int(6)))
-            )
-        );
-    }
-    #[test]
-    fn test_expr9() {
-        assert_parse!(
-            expr9("4 || 5 || 99"),
-            Expr::logical_or(Expr::logical_or(int(4), int(5)), int(99))
-        );
-        assert_parse!(
-            expr9("4 || 5 && 99"),
-            Expr::logical_or(int(4), Expr::logical_and(int(5), int(99)))
-        );
-    }
-    #[test]
-    fn test_expr8() {
-        assert_parse!(
-            expr8("4 && 5 && 99"),
-            Expr::logical_and(Expr::logical_and(int(4), int(5)), int(99))
-        );
-        assert_parse!(
-            expr8("4 + 5 && 99"),
-            Expr::logical_and(Expr::binary_op("+", int(4), int(5)), int(99))
-        );
-    }
-    #[test]
-    fn test_expr7() {
-        assert_parse!(
-            expr7("4 > 5 <= 99"),
-            Expr::binary_op("<=", Expr::binary_op(">", int(4), int(5)), int(99))
-        );
-        assert_parse!(
-            expr7("4 + 5 == 99"),
-            Expr::binary_op("==", Expr::binary_op("+", int(4), int(5)), int(99))
-        );
-    }
-    #[test]
-    fn test_expr6() {
-        assert_parse!(
-            expr6("4 | 5 | 99"),
-            Expr::binary_op("|", Expr::binary_op("|", int(4), int(5)), int(99))
-        );
-        assert_parse!(
-            expr6("4 | 5 ^ 99"),
-            Expr::binary_op("|", int(4), Expr::binary_op("^", int(5), int(99)))
-        );
-    }
-    #[test]
-    fn test_expr5() {
-        assert_parse!(
-            expr5("4 ^ 5 ^ 99"),
-            Expr::binary_op("^", Expr::binary_op("^", int(4), int(5)), int(99))
-        );
-        assert_parse!(
-            expr5("4 ^ 5 & 99"),
-            Expr::binary_op("^", int(4), Expr::binary_op("&", int(5), int(99)))
-        );
-    }
-    #[test]
-    fn test_expr4() {
-        assert_parse!(
-            expr4("4 & 5 & 99"),
-            Expr::binary_op("&", Expr::binary_op("&", int(4), int(5)), int(99))
-        );
-        assert_parse!(
-            expr4("4 + 5 & 99"),
-            Expr::binary_op("&", Expr::binary_op("+", int(4), int(5)), int(99))
-        );
-    }
-    #[test]
-    fn test_expr3() {
-        assert_parse!(
-            expr4("4 >> 5 << 99"),
-            Expr::binary_op("<<", Expr::binary_op(">>", int(4), int(5)), int(99))
-        );
-        assert_parse!(
-            expr4("4 << 5 - 99"),
-            Expr::binary_op("<<", int(4), Expr::binary_op("-", int(5), int(99)))
-        );
-    }
-    #[test]
-    fn test_expr2() {
-        assert_parse!(
-            expr2("3 * 9 - 4"),
-            Expr::binary_op("-", Expr::binary_op("*", int(3), int(9)), int(4)),
-        );
-        assert_parse!(
-            expr2("4\n+\r3 *     \n\t\r 2"),
-            Expr::binary_op("+", int(4), Expr::binary_op("*", int(3), int(2)))
-        );
-    }
-    #[test]
-    fn test_expr1() {
-        assert_parse!(
-            expr2("3 + 9 - 4"),
-            Expr::binary_op("-", Expr::binary_op("+", int(3), int(9)), int(4)),
-        );
-        assert_parse!(
-            expr2("4\n-\r3 +     \n\t\r 2"),
-            Expr::binary_op("+", Expr::binary_op("-", int(4), int(3)), int(2))
-        );
-    }
-    #[test]
-    fn test_term() {
-        assert_parse!(term("42"), Expr::Literal(Literal::Integer(42)));
-    }
-
-    #[test]
-    fn test_character() {
-        assert_parse!(character("'a'"), b'a');
-        assert_parse!(character("'\\n'"), b'\n');
-        assert_parse!(character("'\\060'"), b'0');
-    }
-
-    fn int(val: i64) -> Expr {
-        Expr::Literal(Literal::Integer(val))
-    }
-}
+mod tests;
