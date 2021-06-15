@@ -12,18 +12,42 @@ impl<'a> Located<'a> for Span<'a> {
 
 #[derive(Debug, PartialEq)]
 pub struct ASTree<'a> {
-    root: Expr<'a>,
+    pub position: Span<'a>,
+    pub declarations: Vec<DefinedFunction<'a>>,
 }
 
-impl ASTree<'_> {
-    pub fn new(root: Expr) -> ASTree {
-        ASTree { root }
-    }
+#[derive(Debug, PartialEq)]
+pub struct DefinedFunction<'a> {
+    pub ret_type: TypeRef<'a>,
+    pub name: Span<'a>,
+    pub params: Vec<Param<'a>>,
+    pub body: Block<'a>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct TypeRef<'a> {
+    pub name: Span<'a>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Param<'a> {
+    pub r#type: Span<'a>,
+    pub name: Span<'a>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Block<'a> {
+    pub stmts: Vec<Stmt<'a>>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Stmt<'a> {
+    Expr(Expr<'a>),
 }
 
 impl<'a> Located<'a> for ASTree<'a> {
     fn position(&self) -> Span<'a> {
-        self.root.position()
+        self.position
     }
 }
 

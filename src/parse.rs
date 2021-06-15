@@ -10,15 +10,64 @@ use nom::sequence::{delimited, pair, preceded, tuple};
 use nom::{IResult, Parser};
 use nom_locate::position;
 
-use ast::{ASTree, Expr, Literal};
+use ast::{ASTree, Block, DefinedFunction, Expr, Literal, Param, Stmt, TypeRef};
 
 type Span<'a> = nom_locate::LocatedSpan<&'a str>;
 
-pub fn parse(source: &str) -> Result<ASTree, nom::Err<nom::error::Error<Span>>> {
+pub fn parse(source: &'static str) -> Result<ASTree, anyhow::Error> {
     let source = Span::new(source);
-    let (source, _) = skip(source)?;
-    let (_, root) = all_consuming(expr)(source)?;
-    Ok(ASTree::new(root))
+    let (_, ast) = all_consuming(ast)(source)?;
+    Ok(ast)
+}
+
+fn ast(source: Span) -> IResult<Span, ASTree> {
+    let (source, position) = position(source)?;
+    let (source, declarations) = many0(s(declaration))(source)?;
+    Ok((
+        source,
+        ASTree {
+            position,
+            declarations,
+        },
+    ))
+}
+
+fn declaration(source: Span) -> IResult<Span, DefinedFunction> {
+    let (source, ret_type) = type_ref(source)?;
+    let (source, name) = s(identifier)(source)?;
+    let (source, params) = delimited(s(tag("(")), s(many0(param)), s(tag(")")))(source)?;
+    let (source, body) = s(block)(source)?;
+    Ok((
+        source,
+        DefinedFunction {
+            ret_type,
+            name,
+            params,
+            body,
+        },
+    ))
+}
+
+fn type_ref(source: Span) -> IResult<Span, TypeRef> {
+    let (source, name) = identifier(source)?;
+    Ok((source, TypeRef { name }))
+}
+
+fn param(source: Span) -> IResult<Span, Param> {
+    let (source, r#type) = identifier(source)?;
+    let (source, name) = s(identifier)(source)?;
+    Ok((source, Param { r#type, name }))
+}
+
+fn block(source: Span) -> IResult<Span, Block> {
+    let (source, stmts) = delimited(tag("{"), many0(s(stmt)), s(tag("}")))(source)?;
+    Ok((source, Block { stmts }))
+}
+
+fn stmt(source: Span) -> IResult<Span, Stmt> {
+    let (source, expr) = expr(source)?;
+    let (source, _) = s(tag(";"))(source)?;
+    Ok((source, Stmt::Expr(expr)))
 }
 
 fn expr(source: Span) -> IResult<Span, Expr> {
@@ -27,12 +76,7 @@ fn expr(source: Span) -> IResult<Span, Expr> {
 
 fn expr10(source: Span) -> IResult<Span, Expr> {
     let (source, init) = expr9(source)?;
-    let (source, qtce) = opt(tuple((
-        skipped(char('?')),
-        skipped(expr),
-        skipped(char(':')),
-        skipped(expr10),
-    )))(source)?;
+    let (source, qtce) = opt(tuple((s(char('?')), s(expr), s(char(':')), s(expr10))))(source)?;
     Ok((
         source,
         if let Some((_question, then, _colon, r#else)) = qtce {
@@ -45,20 +89,12 @@ fn expr10(source: Span) -> IResult<Span, Expr> {
 
 fn expr9(source: Span) -> IResult<Span, Expr> {
     let (source, init) = expr8(source)?;
-    fold_many0(
-        preceded(skipped(tag("||")), skipped(expr8)),
-        init,
-        Expr::logical_or,
-    )(source)
+    fold_many0(preceded(s(tag("||")), s(expr8)), init, Expr::logical_or)(source)
 }
 
 fn expr8(source: Span) -> IResult<Span, Expr> {
     let (source, init) = expr7(source)?;
-    fold_many0(
-        preceded(skipped(tag("&&")), skipped(expr7)),
-        init,
-        Expr::logical_and,
-    )(source)
+    fold_many0(preceded(s(tag("&&")), s(expr7)), init, Expr::logical_and)(source)
 }
 
 fn expr7(source: Span) -> IResult<Span, Expr> {
@@ -71,44 +107,36 @@ fn expr7(source: Span) -> IResult<Span, Expr> {
         tag("<"),
         tag(">"),
     ));
-    fold_many0(
-        pair(skipped(cmp), skipped(expr6)),
-        init,
-        |lhs, (op, rhs)| Expr::binary_op(op.fragment(), lhs, rhs),
-    )(source)
+    fold_many0(pair(s(cmp), s(expr6)), init, |lhs, (op, rhs)| {
+        Expr::binary_op(op.fragment(), lhs, rhs)
+    })(source)
 }
 
 fn expr6(source: Span) -> IResult<Span, Expr> {
     let (source, init) = expr5(source)?;
-    fold_many0(
-        pair(skipped(tag("|")), skipped(expr5)),
-        init,
-        |lhs, (op, rhs)| Expr::binary_op(op.fragment(), lhs, rhs),
-    )(source)
+    fold_many0(pair(s(tag("|")), s(expr5)), init, |lhs, (op, rhs)| {
+        Expr::binary_op(op.fragment(), lhs, rhs)
+    })(source)
 }
 
 fn expr5(source: Span) -> IResult<Span, Expr> {
     let (source, init) = expr4(source)?;
-    fold_many0(
-        pair(skipped(tag("^")), skipped(expr4)),
-        init,
-        |lhs, (op, rhs)| Expr::binary_op(op.fragment(), lhs, rhs),
-    )(source)
+    fold_many0(pair(s(tag("^")), s(expr4)), init, |lhs, (op, rhs)| {
+        Expr::binary_op(op.fragment(), lhs, rhs)
+    })(source)
 }
 
 fn expr4(source: Span) -> IResult<Span, Expr> {
     let (source, init) = expr3(source)?;
-    fold_many0(
-        pair(skipped(tag("&")), skipped(expr3)),
-        init,
-        |lhs, (op, rhs)| Expr::binary_op(&op.to_string(), lhs, rhs),
-    )(source)
+    fold_many0(pair(s(tag("&")), s(expr3)), init, |lhs, (op, rhs)| {
+        Expr::binary_op(&op.to_string(), lhs, rhs)
+    })(source)
 }
 
 fn expr3(source: Span) -> IResult<Span, Expr> {
     let (source, init) = expr2(source)?;
     fold_many0(
-        pair(skipped(alt((tag(">>"), tag("<<")))), skipped(expr2)),
+        pair(s(alt((tag(">>"), tag("<<")))), s(expr2)),
         init,
         |lhs, (op, rhs)| Expr::binary_op(&op.to_string(), lhs, rhs),
     )(source)
@@ -116,20 +144,16 @@ fn expr3(source: Span) -> IResult<Span, Expr> {
 
 fn expr2(source: Span) -> IResult<Span, Expr> {
     let (source, init) = expr1(source)?;
-    fold_many0(
-        pair(skipped(one_of("+-")), skipped(expr1)),
-        init,
-        |lhs, (op, rhs)| Expr::binary_op(&op.to_string(), lhs, rhs),
-    )(source)
+    fold_many0(pair(s(one_of("+-")), s(expr1)), init, |lhs, (op, rhs)| {
+        Expr::binary_op(&op.to_string(), lhs, rhs)
+    })(source)
 }
 
 fn expr1(source: Span) -> IResult<Span, Expr> {
     let (source, init) = term(source)?;
-    fold_many0(
-        pair(skipped(one_of("*/%")), skipped(term)),
-        init,
-        |lhs, (op, rhs)| Expr::binary_op(&op.to_string(), lhs, rhs),
-    )(source)
+    fold_many0(pair(s(one_of("*/%")), s(term)), init, |lhs, (op, rhs)| {
+        Expr::binary_op(&op.to_string(), lhs, rhs)
+    })(source)
 }
 
 fn term(source: Span) -> IResult<Span, Expr> {
@@ -140,7 +164,7 @@ fn primary(source: Span) -> IResult<Span, Expr> {
     alt((
         map(identifier, Expr::Identifier),
         map(literal, Expr::Literal),
-        delimited(char('('), skipped(expr), skipped(char(')'))),
+        delimited(char('('), s(expr), s(char(')'))),
     ))(source)
 }
 
@@ -186,7 +210,7 @@ fn character(source: Span) -> IResult<Span, Literal> {
     Ok((source, Literal::Character { position, val }))
 }
 
-fn skipped<'a, O, E: ParseError<Span<'a>>>(
+fn s<'a, O, E: ParseError<Span<'a>>>(
     f: impl Parser<Span<'a>, O, E>,
 ) -> impl FnMut(Span<'a>) -> IResult<Span, O, E> {
     preceded(skip, f)
