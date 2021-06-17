@@ -5,12 +5,15 @@ use nom::bytes::complete::{tag, take_while_m_n};
 use nom::character::complete::{alpha1, alphanumeric1, char, digit1, one_of, satisfy};
 use nom::combinator::{all_consuming, map, map_res, opt, recognize, value};
 use nom::error::ParseError;
-use nom::multi::{fold_many0, many0};
+use nom::multi::{fold_many0, many0, separated_list0, separated_list1};
 use nom::sequence::{delimited, pair, preceded, tuple};
 use nom::{IResult, Parser};
 use nom_locate::position;
 
-use ast::{ASTree, Block, DefinedFunction, Expr, Literal, Param, Stmt, TypeRef};
+use ast::{
+    ASTree, Block, Declarations, DefinedFunction, DefinedVariable, Expr, Literal, Param, Stmt,
+    TypeRef,
+};
 
 type Span<'a> = nom_locate::LocatedSpan<&'a str>;
 
@@ -22,7 +25,8 @@ pub fn parse(source: &'static str) -> Result<ASTree, anyhow::Error> {
 
 fn ast(source: Span) -> IResult<Span, ASTree> {
     let (source, position) = position(source)?;
-    let (source, declarations) = many0(s(declaration))(source)?;
+    let (source, declarations) = declarations(source)?;
+    let (source, _skip) = skip(source)?;
     Ok((
         source,
         ASTree {
@@ -32,10 +36,27 @@ fn ast(source: Span) -> IResult<Span, ASTree> {
     ))
 }
 
-fn declaration(source: Span) -> IResult<Span, DefinedFunction> {
+fn declarations(source: Span) -> IResult<Span, Declarations> {
+    let mut ret = Declarations::default();
+    enum Declaration<'a> {
+        Defun(DefinedFunction<'a>),
+        Defvars(Vec<DefinedVariable<'a>>),
+    }
+    use Declaration::*;
+    let declaration = alt((map(defun, Defun), map(defvars, Defvars)));
+    let declaration = map(s(declaration), |decl| match decl {
+        Defun(defun) => ret.add_defun(defun),
+        Defvars(defvars) => ret.add_defvars(defvars),
+    });
+    let (source, _declarations) = many0(declaration)(source)?;
+    Ok((source, ret))
+}
+
+fn defun(source: Span) -> IResult<Span, DefinedFunction> {
     let (source, ret_type) = type_ref(source)?;
     let (source, name) = s(identifier)(source)?;
-    let (source, params) = delimited(s(tag("(")), s(many0(param)), s(tag(")")))(source)?;
+    let params = separated_list0(s(tag(",")), s(param));
+    let (source, params) = delimited(s(tag("(")), s(params), s(tag(")")))(source)?;
     let (source, body) = s(block)(source)?;
     Ok((
         source,
@@ -46,6 +67,22 @@ fn declaration(source: Span) -> IResult<Span, DefinedFunction> {
             body,
         },
     ))
+}
+
+fn defvars(source: Span) -> IResult<Span, Vec<DefinedVariable>> {
+    let (source, r#type) = type_ref(source)?;
+    let (source, vars) = separated_list1(s(tag(",")), s(defvar_type(r#type)))(source)?;
+    let (source, _semicolon) = s(tag(";"))(source)?;
+    Ok((source, vars))
+}
+
+fn defvar_type<'a>(
+    r#type: TypeRef<'a>,
+) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, DefinedVariable<'a>> {
+    move |source| {
+        let (source, name) = identifier(source)?;
+        Ok((source, DefinedVariable { r#type, name }))
+    }
 }
 
 fn type_ref(source: Span) -> IResult<Span, TypeRef> {

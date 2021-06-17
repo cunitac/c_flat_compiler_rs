@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::Span;
 
 pub trait Located<'a> {
@@ -13,10 +15,25 @@ impl<'a> Located<'a> for Span<'a> {
 #[derive(Debug, PartialEq)]
 pub struct ASTree<'a> {
     pub position: Span<'a>,
-    pub declarations: Vec<DefinedFunction<'a>>,
+    pub declarations: Declarations<'a>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Default)]
+pub struct Declarations<'a> {
+    pub defuns: HashSet<DefinedFunction<'a>>,
+    pub defvars: HashSet<DefinedVariable<'a>>,
+}
+
+impl<'a> Declarations<'a> {
+    pub fn add_defun(&mut self, func: DefinedFunction<'a>) {
+        self.defuns.insert(func);
+    }
+    pub fn add_defvars(&mut self, defvars: Vec<DefinedVariable<'a>>) {
+        self.defvars.extend(defvars)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct DefinedFunction<'a> {
     pub ret_type: TypeRef<'a>,
     pub name: Span<'a>,
@@ -24,23 +41,29 @@ pub struct DefinedFunction<'a> {
     pub body: Block<'a>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct DefinedVariable<'a> {
+    pub r#type: TypeRef<'a>,
+    pub name: Span<'a>,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct TypeRef<'a> {
     pub name: Span<'a>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Param<'a> {
     pub r#type: Span<'a>,
     pub name: Span<'a>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Block<'a> {
     pub stmts: Vec<Stmt<'a>>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub enum Stmt<'a> {
     Expr(Expr<'a>),
 }
@@ -53,7 +76,7 @@ impl<'a> Located<'a> for ASTree<'a> {
 
 type BoxExpr<'a> = Box<Expr<'a>>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Expr<'a> {
     Literal(Literal<'a>),
     Identifier(Span<'a>),
@@ -120,7 +143,7 @@ impl<'a> Located<'a> for Expr<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, Hash)]
 pub enum Literal<'a> {
     Integer { val: i64, position: Span<'a> },
     Character { val: u8, position: Span<'a> },
