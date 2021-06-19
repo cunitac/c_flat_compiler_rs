@@ -102,6 +102,20 @@ fn block(source: Span) -> IResult<Span, Block> {
 }
 
 fn stmt(source: Span) -> IResult<Span, Stmt> {
+    alt((expr_stmt, map(block, Stmt::Block), r#if))(source)
+}
+
+fn r#if(source: Span) -> IResult<Span, Stmt> {
+    let (source, _if) = tag("if")(source)?;
+    let (source, _open) = s(tag("("))(source)?;
+    let (source, cond) = s(expr)(source)?;
+    let (source, _close) = s(tag(")"))(source)?;
+    let (source, then) = s(stmt)(source)?;
+    let (source, r#else) = opt(preceded(s(tag("else")), s(stmt)))(source)?;
+    Ok((source, Stmt::r#if(cond, then, r#else)))
+}
+
+fn expr_stmt(source: Span) -> IResult<Span, Stmt> {
     let (source, expr) = expr(source)?;
     let (source, _) = s(tag(";"))(source)?;
     Ok((source, Stmt::Expr(expr)))

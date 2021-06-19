@@ -63,9 +63,27 @@ pub struct Block<'a> {
     pub stmts: Vec<Stmt<'a>>,
 }
 
+type BoxStmt<'a> = Box<Stmt<'a>>;
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum Stmt<'a> {
     Expr(Expr<'a>),
+    If {
+        cond: Expr<'a>,
+        then: BoxStmt<'a>,
+        r#else: Option<BoxStmt<'a>>,
+    },
+    Block(Block<'a>),
+}
+
+impl<'a> Stmt<'a> {
+    pub fn r#if(cond: Expr<'a>, then: Stmt<'a>, r#else: Option<Stmt<'a>>) -> Self {
+        Self::If {
+            cond,
+            then: Box::new(then),
+            r#else: r#else.map(Box::new),
+        }
+    }
 }
 
 impl<'a> Located<'a> for ASTree<'a> {
@@ -143,10 +161,21 @@ impl<'a> Located<'a> for Expr<'a> {
     }
 }
 
-#[derive(Debug, Clone, Eq, Hash)]
+#[derive(Clone, Eq, Hash)]
 pub enum Literal<'a> {
     Integer { val: i64, position: Span<'a> },
     Character { val: u8, position: Span<'a> },
+}
+
+impl std::fmt::Debug for Literal<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Literal::Integer { val, .. } => f.debug_tuple("Integer").field(val).finish(),
+            Literal::Character { val, .. } => {
+                f.debug_tuple("Character").field(&(*val as char)).finish()
+            }
+        }
+    }
 }
 
 impl PartialEq for Literal<'_> {
