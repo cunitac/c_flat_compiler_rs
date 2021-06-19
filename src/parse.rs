@@ -11,8 +11,8 @@ use nom::{IResult, Parser};
 use nom_locate::position;
 
 use ast::{
-    ASTree, Block, Declarations, DefinedFunction, DefinedVariable, Expr, Literal, Param, Stmt,
-    TypeRef,
+    ASTree, Block, Declarations, DefinedFunction, DefinedVariable, Expr, Identifier, Literal,
+    Param, Stmt, TypeRef,
 };
 
 type Span<'a> = nom_locate::LocatedSpan<&'a str>;
@@ -62,7 +62,7 @@ fn defun(source: Span) -> IResult<Span, DefinedFunction> {
         source,
         DefinedFunction {
             ret_type,
-            name,
+            name: Identifier(name),
             params,
             body,
         },
@@ -81,7 +81,13 @@ fn defvar_type<'a>(
 ) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, DefinedVariable<'a>> {
     move |source| {
         let (source, name) = identifier(source)?;
-        Ok((source, DefinedVariable { r#type, name }))
+        Ok((
+            source,
+            DefinedVariable {
+                r#type,
+                name: Identifier(name),
+            },
+        ))
     }
 }
 
@@ -93,7 +99,7 @@ fn type_ref(source: Span) -> IResult<Span, TypeRef> {
 fn param(source: Span) -> IResult<Span, Param> {
     let (source, r#type) = identifier(source)?;
     let (source, name) = s(identifier)(source)?;
-    Ok((source, Param { r#type, name }))
+    Ok((source, Param::new(r#type, name)))
 }
 
 fn block(source: Span) -> IResult<Span, Block> {
@@ -213,7 +219,7 @@ fn term(source: Span) -> IResult<Span, Expr> {
 
 fn primary(source: Span) -> IResult<Span, Expr> {
     alt((
-        map(identifier, Expr::Identifier),
+        map(identifier, Expr::identifier),
         map(literal, Expr::Literal),
         delimited(char('('), s(expr), s(char(')'))),
     ))(source)

@@ -36,7 +36,7 @@ impl<'a> Declarations<'a> {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct DefinedFunction<'a> {
     pub ret_type: TypeRef<'a>,
-    pub name: Span<'a>,
+    pub name: Identifier<'a>,
     pub params: Vec<Param<'a>>,
     pub body: Block<'a>,
 }
@@ -44,18 +44,35 @@ pub struct DefinedFunction<'a> {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct DefinedVariable<'a> {
     pub r#type: TypeRef<'a>,
-    pub name: Span<'a>,
+    pub name: Identifier<'a>,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub struct TypeRef<'a> {
     pub name: Span<'a>,
 }
 
+impl std::fmt::Debug for TypeRef<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_tuple("TypeRef")
+            .field(self.name.fragment())
+            .finish()
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Param<'a> {
-    pub r#type: Span<'a>,
-    pub name: Span<'a>,
+    pub r#type: TypeRef<'a>,
+    pub name: Identifier<'a>,
+}
+
+impl<'a> Param<'a> {
+    pub fn new(r#type: Span<'a>, name: Span<'a>) -> Self {
+        Self {
+            r#type: TypeRef { name: r#type },
+            name: Identifier(name),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -97,7 +114,7 @@ type BoxExpr<'a> = Box<Expr<'a>>;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Expr<'a> {
     Literal(Literal<'a>),
-    Identifier(Span<'a>),
+    Identifier(Identifier<'a>),
     BinaryOp {
         op: String,
         lhs: BoxExpr<'a>,
@@ -118,7 +135,21 @@ pub enum Expr<'a> {
     },
 }
 
-impl Expr<'_> {
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Identifier<'a>(pub Span<'a>);
+
+impl std::fmt::Debug for Identifier<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_tuple("Identifier")
+            .field(self.0.fragment())
+            .finish()
+    }
+}
+
+impl<'a> Expr<'a> {
+    pub fn identifier(span: Span<'a>) -> Self {
+        Expr::Identifier(Identifier(span))
+    }
     pub fn binary_op(op: &str, lhs: Self, rhs: Self) -> Self {
         Expr::BinaryOp {
             op: op.to_string(),
@@ -152,7 +183,7 @@ impl<'a> Located<'a> for Expr<'a> {
         use Expr::*;
         match self {
             Literal(literal) => literal.position(),
-            Identifier(identifier) => identifier.position(),
+            Identifier(identifier) => identifier.0.position(),
             BinaryOp { lhs, .. } => lhs.position(),
             Cond { cond, .. } => cond.position(),
             LogicalOr { lhs, .. } => lhs.position(),
