@@ -56,7 +56,7 @@ fn defun(source: Span) -> IResult<Span, DefinedFunction> {
     let (source, ret_type) = type_ref(source)?;
     let (source, name) = s(identifier)(source)?;
     let params = separated_list0(s(tag(",")), s(param));
-    let (source, params) = delimited(s(tag("(")), s(params), s(tag(")")))(source)?;
+    let (source, params) = paren(params)(source)?;
     let (source, body) = s(block)(source)?;
     Ok((
         source,
@@ -113,9 +113,7 @@ fn stmt(source: Span) -> IResult<Span, Stmt> {
 
 fn r#if(source: Span) -> IResult<Span, Stmt> {
     let (source, _if) = tag("if")(source)?;
-    let (source, _open) = s(tag("("))(source)?;
-    let (source, cond) = s(expr)(source)?;
-    let (source, _close) = s(tag(")"))(source)?;
+    let (source, cond) = paren(expr)(source)?;
     let (source, then) = s(stmt)(source)?;
     let (source, r#else) = opt(preceded(s(tag("else")), s(stmt)))(source)?;
     Ok((source, Stmt::r#if(cond, then, r#else)))
@@ -221,7 +219,7 @@ fn primary(source: Span) -> IResult<Span, Expr> {
     alt((
         map(identifier, Expr::identifier),
         map(literal, Expr::Literal),
-        delimited(char('('), s(expr), s(char(')'))),
+        paren(expr),
     ))(source)
 }
 
@@ -276,6 +274,12 @@ fn s<'a, O, E: ParseError<Span<'a>>>(
 fn skip<'a, E: ParseError<Span<'a>>>(source: Span<'a>) -> IResult<Span, Span, E> {
     use nom::InputTakeAtPosition as _;
     source.split_at_position_complete(|item| !item.is_ascii_whitespace())
+}
+
+fn paren<'a, O, E: ParseError<Span<'a>>>(
+    f: impl Parser<Span<'a>, O, E>,
+) -> impl FnMut(Span<'a>) -> IResult<Span, O, E> {
+    delimited(tag("("), s(f), s(tag(")")))
 }
 
 #[cfg(test)]
