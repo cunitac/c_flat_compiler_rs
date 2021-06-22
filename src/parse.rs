@@ -4,7 +4,6 @@ use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while_m_n};
 use nom::character::complete::{alpha1, alphanumeric1, char, digit1, one_of, satisfy};
 use nom::combinator::{all_consuming, map, map_res, opt, recognize, value};
-use nom::error::ParseError;
 use nom::multi::{fold_many0, many0, separated_list0, separated_list1};
 use nom::sequence::{delimited, pair, preceded, tuple};
 use nom::Parser;
@@ -265,6 +264,7 @@ fn character(source: Span) -> IResult<Literal> {
     Ok((source, Literal::Character { position, val }))
 }
 
+/// <SPACES> <OUTPUT>
 fn s<'a, O>(
     f: impl Parser<Span<'a>, O, nom::error::Error<Span<'a>>>,
 ) -> impl FnMut(Span<'a>) -> IResult<O> {
@@ -276,6 +276,7 @@ fn skip(source: Span) -> IResult<Span> {
     source.split_at_position_complete(|item| !item.is_ascii_whitespace())
 }
 
+/// "(" <SPACES> <OUTPUT> <SPACES> ")"
 fn paren<'a, O>(
     f: impl Parser<Span<'a>, O, nom::error::Error<Span<'a>>>,
 ) -> impl FnMut(Span<'a>) -> IResult<O> {
