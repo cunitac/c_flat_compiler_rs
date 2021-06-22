@@ -77,6 +77,7 @@ impl<'a> Param<'a> {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Block<'a> {
+    pub defvars: Vec<DefinedVariable<'a>>,
     pub stmts: Vec<Stmt<'a>>,
 }
 

@@ -44,7 +44,7 @@ fn declarations(source: Span) -> IResult<Declarations> {
         Defvars(Vec<DefinedVariable<'a>>),
     }
     use Declaration::*;
-    let declaration = alt((map(defun, Defun), map(defvars, Defvars)));
+    let declaration = alt((map(defun, Defun), map(defvar, Defvars)));
     let declaration = map(s(declaration), |decl| match decl {
         Defun(defun) => ret.add_defun(defun),
         Defvars(defvars) => ret.add_defvars(defvars),
@@ -70,7 +70,7 @@ fn defun(source: Span) -> IResult<DefinedFunction> {
     ))
 }
 
-fn defvars(source: Span) -> IResult<Vec<DefinedVariable>> {
+fn defvar(source: Span) -> IResult<Vec<DefinedVariable>> {
     let (source, r#type) = type_ref(source)?;
     let (source, vars) = separated_list1(s(tag(",")), s(defvar_type(r#type)))(source)?;
     let (source, _semicolon) = s(tag(";"))(source)?;
@@ -90,6 +90,12 @@ fn defvar_type<'a>(r#type: TypeRef<'a>) -> impl FnMut(Span<'a>) -> IResult<Defin
     }
 }
 
+fn defvars(source: Span) -> IResult<Vec<DefinedVariable>> {
+    let (source, defvars) = separated_list0(skip, defvar)(source)?;
+    let defvars = defvars.into_iter().flatten().collect();
+    Ok((source, defvars))
+}
+
 fn type_ref(source: Span) -> IResult<TypeRef> {
     let (source, name) = identifier(source)?;
     Ok((source, TypeRef { name }))
@@ -102,8 +108,11 @@ fn param(source: Span) -> IResult<Param> {
 }
 
 fn block(source: Span) -> IResult<Block> {
-    let (source, stmts) = delimited(tag("{"), many0(s(stmt)), s(tag("}")))(source)?;
-    Ok((source, Block { stmts }))
+    let (source, _open) = char('{')(source)?;
+    let (source, defvars) = s(defvars)(source)?;
+    let (source, stmts) = many0(s(stmt))(source)?;
+    let (source, _close) = s(char('}'))(source)?;
+    Ok((source, Block { defvars, stmts }))
 }
 
 fn stmt(source: Span) -> IResult<Stmt> {
