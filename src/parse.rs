@@ -148,7 +148,36 @@ fn expr_stmt(src: Span) -> IResult<Stmt> {
 }
 
 fn expr(src: Span) -> IResult<Expr> {
-    expr10(src)
+    alt((assign, op_assign, expr10))(src)
+}
+
+fn assign(src: Span) -> IResult<Expr> {
+    let (src, lhs) = term(src)?;
+    let (src, _eq) = s(char('='))(src)?;
+    let (src, rhs) = s(expr)(src)?;
+    Ok((src, Expr::assign(lhs, rhs)))
+}
+
+fn op_assign(src: Span) -> IResult<Expr> {
+    let (src, lhs) = term(src)?;
+    let (src, op) = s(op_assign_op)(src)?;
+    let (src, rhs) = s(expr)(src)?;
+    Ok((src, Expr::op_assign(op, lhs, rhs)))
+}
+
+fn op_assign_op(src: Span) -> IResult<Span> {
+    alt((
+        tag("+="),
+        tag("-="),
+        tag("*="),
+        tag("/="),
+        tag("%="),
+        tag("&="),
+        tag("|="),
+        tag("^="),
+        tag("<<="),
+        tag(">>="),
+    ))(src)
 }
 
 fn expr10(src: Span) -> IResult<Expr> {
@@ -185,51 +214,52 @@ fn expr7(src: Span) -> IResult<Expr> {
         tag(">"),
     ));
     fold_many0(pair(s(cmp), s(expr6)), init, |lhs, (op, rhs)| {
-        Expr::binary_op(op.fragment(), lhs, rhs)
+        Expr::binary_op(op, lhs, rhs)
     })(src)
 }
 
 fn expr6(src: Span) -> IResult<Expr> {
     let (src, init) = expr5(src)?;
     fold_many0(pair(s(tag("|")), s(expr5)), init, |lhs, (op, rhs)| {
-        Expr::binary_op(op.fragment(), lhs, rhs)
+        Expr::binary_op(op, lhs, rhs)
     })(src)
 }
 
 fn expr5(src: Span) -> IResult<Expr> {
     let (src, init) = expr4(src)?;
     fold_many0(pair(s(tag("^")), s(expr4)), init, |lhs, (op, rhs)| {
-        Expr::binary_op(op.fragment(), lhs, rhs)
+        Expr::binary_op(op, lhs, rhs)
     })(src)
 }
 
 fn expr4(src: Span) -> IResult<Expr> {
     let (src, init) = expr3(src)?;
     fold_many0(pair(s(tag("&")), s(expr3)), init, |lhs, (op, rhs)| {
-        Expr::binary_op(&op.to_string(), lhs, rhs)
+        Expr::binary_op(op, lhs, rhs)
     })(src)
 }
 
 fn expr3(src: Span) -> IResult<Expr> {
     let (src, init) = expr2(src)?;
-    fold_many0(
-        pair(s(alt((tag(">>"), tag("<<")))), s(expr2)),
-        init,
-        |lhs, (op, rhs)| Expr::binary_op(&op.to_string(), lhs, rhs),
-    )(src)
+    let op = alt((tag(">>"), tag("<<")));
+    fold_many0(pair(s(op), s(expr2)), init, |lhs, (op, rhs)| {
+        Expr::binary_op(op, lhs, rhs)
+    })(src)
 }
 
 fn expr2(src: Span) -> IResult<Expr> {
     let (src, init) = expr1(src)?;
-    fold_many0(pair(s(one_of("+-")), s(expr1)), init, |lhs, (op, rhs)| {
-        Expr::binary_op(&op.to_string(), lhs, rhs)
+    let op = alt((tag("+"), tag("-")));
+    fold_many0(pair(s(op), s(expr1)), init, |lhs, (op, rhs)| {
+        Expr::binary_op(op, lhs, rhs)
     })(src)
 }
 
 fn expr1(src: Span) -> IResult<Expr> {
     let (src, init) = term(src)?;
-    fold_many0(pair(s(one_of("*/%")), s(term)), init, |lhs, (op, rhs)| {
-        Expr::binary_op(&op.to_string(), lhs, rhs)
+    let op = alt((tag("*"), tag("/"), tag("%")));
+    fold_many0(pair(s(op), s(term)), init, |lhs, (op, rhs)| {
+        Expr::binary_op(op, lhs, rhs)
     })(src)
 }
 

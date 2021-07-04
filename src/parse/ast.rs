@@ -145,6 +145,15 @@ pub enum Expr<'a> {
         lhs: BoxExpr<'a>,
         rhs: BoxExpr<'a>,
     },
+    Assign {
+        lhs: BoxExpr<'a>,
+        rhs: BoxExpr<'a>,
+    },
+    OpAssign {
+        op: String,
+        lhs: BoxExpr<'a>,
+        rhs: BoxExpr<'a>,
+    },
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -162,7 +171,7 @@ impl<'a> Expr<'a> {
     pub fn identifier(span: Span<'a>) -> Self {
         Expr::Identifier(Identifier(span))
     }
-    pub fn binary_op(op: &str, lhs: Self, rhs: Self) -> Self {
+    pub fn binary_op(op: Span, lhs: Self, rhs: Self) -> Self {
         Expr::BinaryOp {
             op: op.to_string(),
             lhs: Box::new(lhs),
@@ -188,6 +197,19 @@ impl<'a> Expr<'a> {
             rhs: Box::new(rhs),
         }
     }
+    pub fn assign(lhs: Self, rhs: Self) -> Self {
+        Expr::Assign {
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs),
+        }
+    }
+    pub fn op_assign(op: Span, lhs: Self, rhs: Self) -> Self {
+        Expr::OpAssign {
+            op: op.to_string(),
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs),
+        }
+    }
 }
 
 impl<'a> Located<'a> for Expr<'a> {
@@ -200,6 +222,8 @@ impl<'a> Located<'a> for Expr<'a> {
             Cond { cond, .. } => cond.position(),
             LogicalOr { lhs, .. } => lhs.position(),
             LogicalAnd { lhs, .. } => lhs.position(),
+            Assign { lhs, .. } => lhs.position(),
+            OpAssign { lhs, .. } => lhs.position(),
         }
     }
 }
