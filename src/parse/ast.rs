@@ -86,6 +86,8 @@ type BoxStmt<'a> = Box<Stmt<'a>>;
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum Stmt<'a> {
     Expr(Expr<'a>),
+    Block(Block<'a>),
+    Return(Expr<'a>),
     If {
         cond: Expr<'a>,
         then: BoxStmt<'a>,
@@ -95,7 +97,6 @@ pub enum Stmt<'a> {
         cond: Expr<'a>,
         body: BoxStmt<'a>,
     },
-    Block(Block<'a>),
 }
 
 impl<'a> Stmt<'a> {

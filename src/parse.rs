@@ -18,18 +18,18 @@ use ast::{
 
 type Span<'a> = nom_locate::LocatedSpan<&'a str>;
 
-pub fn parse(source: &'static str) -> anyhow::Result<ASTree> {
-    let source = Span::new(source);
-    let (_, ast) = all_consuming(ast)(source)?;
+pub fn parse(src: &'static str) -> anyhow::Result<ASTree> {
+    let src = Span::new(src);
+    let (_, ast) = all_consuming(ast)(src)?;
     Ok(ast)
 }
 
-fn ast(source: Span) -> IResult<ASTree> {
-    let (source, position) = position(source)?;
-    let (source, declarations) = declarations(source)?;
-    let (source, _skip) = skip(source)?;
+fn ast(src: Span) -> IResult<ASTree> {
+    let (src, position) = position(src)?;
+    let (src, declarations) = declarations(src)?;
+    let (src, _skip) = skip(src)?;
     Ok((
-        source,
+        src,
         ASTree {
             position,
             declarations,
@@ -37,7 +37,7 @@ fn ast(source: Span) -> IResult<ASTree> {
     ))
 }
 
-fn declarations(source: Span) -> IResult<Declarations> {
+fn declarations(src: Span) -> IResult<Declarations> {
     let mut ret = Declarations::default();
     enum Declaration<'a> {
         Defun(DefinedFunction<'a>),
@@ -49,18 +49,18 @@ fn declarations(source: Span) -> IResult<Declarations> {
         Defun(defun) => ret.add_defun(defun),
         Defvars(defvars) => ret.add_defvars(defvars),
     });
-    let (source, _declarations) = many0(declaration)(source)?;
-    Ok((source, ret))
+    let (src, _declarations) = many0(declaration)(src)?;
+    Ok((src, ret))
 }
 
-fn defun(source: Span) -> IResult<DefinedFunction> {
-    let (source, ret_type) = type_ref(source)?;
-    let (source, name) = s(identifier)(source)?;
+fn defun(src: Span) -> IResult<DefinedFunction> {
+    let (src, ret_type) = type_ref(src)?;
+    let (src, name) = s(identifier)(src)?;
     let params = separated_list0(s(tag(",")), s(param));
-    let (source, params) = paren(params)(source)?;
-    let (source, body) = s(block)(source)?;
+    let (src, params) = paren(params)(src)?;
+    let (src, body) = s(block)(src)?;
     Ok((
-        source,
+        src,
         DefinedFunction {
             ret_type,
             name: Identifier(name),
@@ -70,18 +70,18 @@ fn defun(source: Span) -> IResult<DefinedFunction> {
     ))
 }
 
-fn defvar(source: Span) -> IResult<Vec<DefinedVariable>> {
-    let (source, r#type) = type_ref(source)?;
-    let (source, vars) = separated_list1(s(tag(",")), s(defvar_type(r#type)))(source)?;
-    let (source, _semicolon) = s(tag(";"))(source)?;
-    Ok((source, vars))
+fn defvar(src: Span) -> IResult<Vec<DefinedVariable>> {
+    let (src, r#type) = type_ref(src)?;
+    let (src, vars) = separated_list1(s(tag(",")), s(defvar_type(r#type)))(src)?;
+    let (src, _semicolon) = s(tag(";"))(src)?;
+    Ok((src, vars))
 }
 
 fn defvar_type<'a>(r#type: TypeRef<'a>) -> impl FnMut(Span<'a>) -> IResult<DefinedVariable<'a>> {
-    move |source| {
-        let (source, name) = identifier(source)?;
+    move |src| {
+        let (src, name) = identifier(src)?;
         Ok((
-            source,
+            src,
             DefinedVariable {
                 r#type,
                 name: Identifier(name),
@@ -90,65 +90,72 @@ fn defvar_type<'a>(r#type: TypeRef<'a>) -> impl FnMut(Span<'a>) -> IResult<Defin
     }
 }
 
-fn defvars(source: Span) -> IResult<Vec<DefinedVariable>> {
-    let (source, defvars) = separated_list0(skip, defvar)(source)?;
+fn defvars(src: Span) -> IResult<Vec<DefinedVariable>> {
+    let (src, defvars) = separated_list0(skip, defvar)(src)?;
     let defvars = defvars.into_iter().flatten().collect();
-    Ok((source, defvars))
+    Ok((src, defvars))
 }
 
-fn type_ref(source: Span) -> IResult<TypeRef> {
-    let (source, name) = identifier(source)?;
-    Ok((source, TypeRef { name }))
+fn type_ref(src: Span) -> IResult<TypeRef> {
+    let (src, name) = identifier(src)?;
+    Ok((src, TypeRef { name }))
 }
 
-fn param(source: Span) -> IResult<Param> {
-    let (source, r#type) = identifier(source)?;
-    let (source, name) = s(identifier)(source)?;
-    Ok((source, Param::new(r#type, name)))
+fn param(src: Span) -> IResult<Param> {
+    let (src, r#type) = identifier(src)?;
+    let (src, name) = s(identifier)(src)?;
+    Ok((src, Param::new(r#type, name)))
 }
 
-fn block(source: Span) -> IResult<Block> {
-    let (source, _open) = char('{')(source)?;
-    let (source, defvars) = s(defvars)(source)?;
-    let (source, stmts) = many0(s(stmt))(source)?;
-    let (source, _close) = s(char('}'))(source)?;
-    Ok((source, Block { defvars, stmts }))
+fn block(src: Span) -> IResult<Block> {
+    let (src, _open) = char('{')(src)?;
+    let (src, defvars) = s(defvars)(src)?;
+    let (src, stmts) = many0(s(stmt))(src)?;
+    let (src, _close) = s(char('}'))(src)?;
+    Ok((src, Block { defvars, stmts }))
 }
 
-fn stmt(source: Span) -> IResult<Stmt> {
-    alt((expr_stmt, map(block, Stmt::Block), r#if, r#while))(source)
+fn stmt(src: Span) -> IResult<Stmt> {
+    alt((expr_stmt, map(block, Stmt::Block), r#if, r#while, r#return))(src)
 }
 
-fn r#if(source: Span) -> IResult<Stmt> {
-    let (source, _if) = tag("if")(source)?;
-    let (source, cond) = s(paren(expr))(source)?;
-    let (source, then) = s(stmt)(source)?;
-    let (source, r#else) = opt(preceded(s(tag("else")), s(stmt)))(source)?;
-    Ok((source, Stmt::r#if(cond, then, r#else)))
+fn r#if(src: Span) -> IResult<Stmt> {
+    let (src, _if) = tag("if")(src)?;
+    let (src, cond) = s(paren(expr))(src)?;
+    let (src, then) = s(stmt)(src)?;
+    let (src, r#else) = opt(preceded(s(tag("else")), s(stmt)))(src)?;
+    Ok((src, Stmt::r#if(cond, then, r#else)))
 }
 
-fn r#while(source: Span) -> IResult<Stmt> {
-    let (source, _while) = tag("while")(source)?;
-    let (source, cond) = s(paren(expr))(source)?;
-    let (source, body) = s(stmt)(source)?;
-    Ok((source, Stmt::r#while(cond, body)))
+fn r#while(src: Span) -> IResult<Stmt> {
+    let (src, _while) = tag("while")(src)?;
+    let (src, cond) = s(paren(expr))(src)?;
+    let (src, body) = s(stmt)(src)?;
+    Ok((src, Stmt::r#while(cond, body)))
 }
 
-fn expr_stmt(source: Span) -> IResult<Stmt> {
-    let (source, expr) = expr(source)?;
-    let (source, _) = s(tag(";"))(source)?;
-    Ok((source, Stmt::Expr(expr)))
+fn r#return(src: Span) -> IResult<Stmt> {
+    let (src, _return) = tag("return")(src)?;
+    let (src, expr) = s(expr)(src)?;
+    let (src, _semicolon) = s(char(';'))(src)?;
+    Ok((src, Stmt::Return(expr)))
 }
 
-fn expr(source: Span) -> IResult<Expr> {
-    expr10(source)
+fn expr_stmt(src: Span) -> IResult<Stmt> {
+    let (src, expr) = expr(src)?;
+    let (src, _) = s(tag(";"))(src)?;
+    Ok((src, Stmt::Expr(expr)))
 }
 
-fn expr10(source: Span) -> IResult<Expr> {
-    let (source, init) = expr9(source)?;
-    let (source, qtce) = opt(tuple((s(char('?')), s(expr), s(char(':')), s(expr10))))(source)?;
+fn expr(src: Span) -> IResult<Expr> {
+    expr10(src)
+}
+
+fn expr10(src: Span) -> IResult<Expr> {
+    let (src, init) = expr9(src)?;
+    let (src, qtce) = opt(tuple((s(char('?')), s(expr), s(char(':')), s(expr10))))(src)?;
     Ok((
-        source,
+        src,
         if let Some((_question, then, _colon, r#else)) = qtce {
             Expr::cond(init, then, r#else)
         } else {
@@ -157,18 +164,18 @@ fn expr10(source: Span) -> IResult<Expr> {
     ))
 }
 
-fn expr9(source: Span) -> IResult<Expr> {
-    let (source, init) = expr8(source)?;
-    fold_many0(preceded(s(tag("||")), s(expr8)), init, Expr::logical_or)(source)
+fn expr9(src: Span) -> IResult<Expr> {
+    let (src, init) = expr8(src)?;
+    fold_many0(preceded(s(tag("||")), s(expr8)), init, Expr::logical_or)(src)
 }
 
-fn expr8(source: Span) -> IResult<Expr> {
-    let (source, init) = expr7(source)?;
-    fold_many0(preceded(s(tag("&&")), s(expr7)), init, Expr::logical_and)(source)
+fn expr8(src: Span) -> IResult<Expr> {
+    let (src, init) = expr7(src)?;
+    fold_many0(preceded(s(tag("&&")), s(expr7)), init, Expr::logical_and)(src)
 }
 
-fn expr7(source: Span) -> IResult<Expr> {
-    let (source, init) = expr6(source)?;
+fn expr7(src: Span) -> IResult<Expr> {
+    let (src, init) = expr6(src)?;
     let cmp = alt((
         tag(">="),
         tag("<="),
@@ -179,84 +186,84 @@ fn expr7(source: Span) -> IResult<Expr> {
     ));
     fold_many0(pair(s(cmp), s(expr6)), init, |lhs, (op, rhs)| {
         Expr::binary_op(op.fragment(), lhs, rhs)
-    })(source)
+    })(src)
 }
 
-fn expr6(source: Span) -> IResult<Expr> {
-    let (source, init) = expr5(source)?;
+fn expr6(src: Span) -> IResult<Expr> {
+    let (src, init) = expr5(src)?;
     fold_many0(pair(s(tag("|")), s(expr5)), init, |lhs, (op, rhs)| {
         Expr::binary_op(op.fragment(), lhs, rhs)
-    })(source)
+    })(src)
 }
 
-fn expr5(source: Span) -> IResult<Expr> {
-    let (source, init) = expr4(source)?;
+fn expr5(src: Span) -> IResult<Expr> {
+    let (src, init) = expr4(src)?;
     fold_many0(pair(s(tag("^")), s(expr4)), init, |lhs, (op, rhs)| {
         Expr::binary_op(op.fragment(), lhs, rhs)
-    })(source)
+    })(src)
 }
 
-fn expr4(source: Span) -> IResult<Expr> {
-    let (source, init) = expr3(source)?;
+fn expr4(src: Span) -> IResult<Expr> {
+    let (src, init) = expr3(src)?;
     fold_many0(pair(s(tag("&")), s(expr3)), init, |lhs, (op, rhs)| {
         Expr::binary_op(&op.to_string(), lhs, rhs)
-    })(source)
+    })(src)
 }
 
-fn expr3(source: Span) -> IResult<Expr> {
-    let (source, init) = expr2(source)?;
+fn expr3(src: Span) -> IResult<Expr> {
+    let (src, init) = expr2(src)?;
     fold_many0(
         pair(s(alt((tag(">>"), tag("<<")))), s(expr2)),
         init,
         |lhs, (op, rhs)| Expr::binary_op(&op.to_string(), lhs, rhs),
-    )(source)
+    )(src)
 }
 
-fn expr2(source: Span) -> IResult<Expr> {
-    let (source, init) = expr1(source)?;
+fn expr2(src: Span) -> IResult<Expr> {
+    let (src, init) = expr1(src)?;
     fold_many0(pair(s(one_of("+-")), s(expr1)), init, |lhs, (op, rhs)| {
         Expr::binary_op(&op.to_string(), lhs, rhs)
-    })(source)
+    })(src)
 }
 
-fn expr1(source: Span) -> IResult<Expr> {
-    let (source, init) = term(source)?;
+fn expr1(src: Span) -> IResult<Expr> {
+    let (src, init) = term(src)?;
     fold_many0(pair(s(one_of("*/%")), s(term)), init, |lhs, (op, rhs)| {
         Expr::binary_op(&op.to_string(), lhs, rhs)
-    })(source)
+    })(src)
 }
 
-fn term(source: Span) -> IResult<Expr> {
-    primary(source)
+fn term(src: Span) -> IResult<Expr> {
+    primary(src)
 }
 
-fn primary(source: Span) -> IResult<Expr> {
+fn primary(src: Span) -> IResult<Expr> {
     alt((
         map(identifier, Expr::identifier),
         map(literal, Expr::Literal),
         paren(expr),
-    ))(source)
+    ))(src)
 }
 
-fn identifier(source: Span) -> IResult<Span> {
+fn identifier(src: Span) -> IResult<Span> {
     recognize(pair(
         alt((alpha1, tag("_"))),
         many0(alt((alphanumeric1, tag("_")))),
-    ))(source)
+    ))(src)
 }
 
-fn literal(source: Span) -> IResult<Literal> {
-    alt((integer, character))(source)
+fn literal(src: Span) -> IResult<Literal> {
+    alt((integer, character))(src)
 }
 
-fn integer(source: Span) -> IResult<Literal> {
-    let (source, position) = position(source)?;
-    let (source, val) = digit1(source)?;
+fn integer(src: Span) -> IResult<Literal> {
+    let (src, position) = position(src)?;
+    let (src, val) = digit1(src)?;
     let val = val.parse().unwrap();
-    Ok((source, Literal::Integer { position, val }))
+    Ok((src, Literal::Integer { position, val }))
 }
 
-fn character(source: Span) -> IResult<Literal> {
+fn character(src: Span) -> IResult<Literal> {
     let simple_char = map(satisfy(|c| c != '\\' && c.is_ascii()), |ch| ch as u8);
     let escaped_char = preceded(
         char('\\'),
@@ -275,9 +282,9 @@ fn character(source: Span) -> IResult<Literal> {
     );
     let character = alt((simple_char, escaped_char, code_char));
 
-    let (source, position) = position(source)?;
-    let (source, val) = delimited(char('\''), character, char('\''))(source)?;
-    Ok((source, Literal::Character { position, val }))
+    let (src, position) = position(src)?;
+    let (src, val) = delimited(char('\''), character, char('\''))(src)?;
+    Ok((src, Literal::Character { position, val }))
 }
 
 /// <SPACES> <OUTPUT>
@@ -287,9 +294,9 @@ fn s<'a, O>(
     preceded(skip, f)
 }
 
-fn skip(source: Span) -> IResult<Span> {
+fn skip(src: Span) -> IResult<Span> {
     use nom::InputTakeAtPosition as _;
-    source.split_at_position_complete(|item| !item.is_ascii_whitespace())
+    src.split_at_position_complete(|item| !item.is_ascii_whitespace())
 }
 
 /// "(" <SPACES> <OUTPUT> <SPACES> ")"
