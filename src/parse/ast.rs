@@ -91,15 +91,25 @@ pub enum Stmt<'a> {
         then: BoxStmt<'a>,
         r#else: Option<BoxStmt<'a>>,
     },
+    While {
+        cond: Expr<'a>,
+        body: BoxStmt<'a>,
+    },
     Block(Block<'a>),
 }
 
 impl<'a> Stmt<'a> {
-    pub fn r#if(cond: Expr<'a>, then: Stmt<'a>, r#else: Option<Stmt<'a>>) -> Self {
+    pub fn r#if(cond: Expr<'a>, then: Self, r#else: Option<Self>) -> Self {
         Self::If {
             cond,
             then: Box::new(then),
             r#else: r#else.map(Box::new),
+        }
+    }
+    pub fn r#while(cond: Expr<'a>, body: Stmt<'a>) -> Self {
+        Self::While {
+            cond,
+            body: Box::new(body),
         }
     }
 }

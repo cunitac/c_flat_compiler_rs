@@ -116,15 +116,22 @@ fn block(source: Span) -> IResult<Block> {
 }
 
 fn stmt(source: Span) -> IResult<Stmt> {
-    alt((expr_stmt, map(block, Stmt::Block), r#if))(source)
+    alt((expr_stmt, map(block, Stmt::Block), r#if, r#while))(source)
 }
 
 fn r#if(source: Span) -> IResult<Stmt> {
     let (source, _if) = tag("if")(source)?;
-    let (source, cond) = paren(expr)(source)?;
+    let (source, cond) = s(paren(expr))(source)?;
     let (source, then) = s(stmt)(source)?;
     let (source, r#else) = opt(preceded(s(tag("else")), s(stmt)))(source)?;
     Ok((source, Stmt::r#if(cond, then, r#else)))
+}
+
+fn r#while(source: Span) -> IResult<Stmt> {
+    let (source, _while) = tag("while")(source)?;
+    let (source, cond) = s(paren(expr))(source)?;
+    let (source, body) = s(stmt)(source)?;
+    Ok((source, Stmt::r#while(cond, body)))
 }
 
 fn expr_stmt(source: Span) -> IResult<Stmt> {
